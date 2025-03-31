@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartKitchen AI | Food Waste Analyzer</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.18.0/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2/dist/coco-ssd.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #2e7d32;
+            --primary-dark: #1b5e20;
+            --secondary: #ff8f00;
+            --light-bg: #f5f5f6;
+        }
+        
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: #f9f9f9;
+            margin: 0;
+            padding: 0;
+        }
+        
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        header {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: white;
+            padding: 15px 0;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 20px;
+        }
+        
+        .logo {
+            display: flex;
+            align-items: center;
+            font-size: 1.3rem;
+            font-weight: 600;
+        }
+        
+        .logo i {
+            margin-right: 10px;
+            font-size: 1.5rem;
+        }
+        
+        .main-content {
+            padding: 30px 0;
+        }
+        
+        .upload-container {
+            background: white;
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+            margin: 20px auto;
+            text-align: center;
+        }
+        
+        .upload-area {
+            border: 2px dashed #ddd;
+            border-radius: 8px;
+            padding: 40px 20px;
+            margin-bottom: 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .upload-area:hover {
+            border-color: var(--primary);
+            background: rgba(46, 125, 50, 0.03);
+        }
+        
+        .upload-area i {
+            font-size: 2.5rem;
+            color: var(--primary);
+            margin-bottom: 15px;
+        }
+        
+        #imagePreview {
+            max-width: 100%;
+            max-height: 400px;
+            margin: 20px auto;
+            display: block;
+            border-radius: 6px;
+            display: none;
+        }
+        
+        #detectBtn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            font-size: 1rem;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s;
+            width: 100%;
+            margin-top: 15px;
+        }
+        
+        #detectBtn:hover {
+            background: var(--primary-dark);
+        }
+        
+        #detectBtn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .loading {
+            display: none;
+            margin: 20px 0;
+            text-align: center;
+        }
+        
+        .spinner {
+            border: 4px solid rgba(0,0,0,0.1);
+            border-radius: 50%;
+            border-top: 4px solid var(--primary);
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        #results {
+            background: white;
+            border-radius: 8px;
+            padding: 25px;
+            margin-top: 25px;
+            display: none;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+        }
+        
+        .summary-card {
+            background: #e8f5e9;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .summary-count {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: var(--primary-dark);
+        }
+        
+        .result-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px;
+            margin-bottom: 8px;
+            background: var(--light-bg);
+            border-radius: 5px;
+        }
+        
+        .fruit-item {
+            background: #e8f5e9;
+        }
+        
+        .result-confidence {
+            background: var(--primary);
+            color: white;
+            padding: 3px 12px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+        }
+        
+        footer {
+            background: #333;
+            color: white;
+            text-align: center;
+            padding: 20px;
+            margin-top: 40px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <div class="logo">
+                <i class="fas fa-utensils"></i>
+                <span>SmartKitchen AI</span>
+            </div>
+        </div>
+    </header>
+    
+    <div class="main-content">
+        <div class="container">
+            <div class="upload-container">
+                <h2>Food Waste Analysis</h2>
+                <p>Upload a photo of your kitchen waste to identify food items and reduce waste</p>
+                
+                <div class="upload-area" id="dropArea">
+                    <i class="fas fa-cloud-upload-alt"></i>
+                    <h3>Drag & Drop Image Here</h3>
+                    <p>or click to select from your device</p>
+                    <input type="file" id="imageUpload" accept="image/*" style="display: none;">
+                </div>
+                
+                <div id="imageContainer">
+                    <img id="imagePreview" alt="Preview">
+                </div>
+                
+                <div class="loading" id="loadingIndicator">
+                    <div class="spinner"></div>
+                    <p>Analyzing food items...</p>
+                </div>
+                
+                <button id="detectBtn" disabled>
+                    <i class="fas fa-search"></i> Analyze Image
+                </button>
+                
+                <div id="results">
+                    <h3>Analysis Results</h3>
+                    <div id="summaryContainer"></div>
+                    <div id="resultsList"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <footer>
+        <p>&copy; 2023 SmartKitchen AI. Helping restaurants reduce food waste.</p>
+    </footer>
+    
+    <script>
+        // DOM elements
+        const imageUpload = document.getElementById('imageUpload');
+        const dropArea = document.getElementById('dropArea');
+        const imagePreview = document.getElementById('imagePreview');
+        const detectBtn = document.getElementById('detectBtn');
+        const resultsDiv = document.getElementById('results');
+        const resultsList = document.getElementById('resultsList');
+        const summaryContainer = document.getElementById('summaryContainer');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        
+        // List of food items we consider as fruits
+        const FRUIT_CLASSES = [
+            'apple', 'banana', 'orange', 'grape', 'strawberry', 
+            'pear', 'peach', 'pineapple', 'watermelon', 'kiwi'
+        ];
+        
+        // Variables
+        let model;
+        let uploadedImage;
+        
+        // Initialize the model
+        async function loadModel() {
+            loadingIndicator.style.display = 'block';
+            try {
+                model = await cocoSsd.load();
+                console.log('Model loaded successfully');
+            } catch (error) {
+                console.error('Error loading model:', error);
+                alert('Error loading the AI model. Please refresh the page.');
+            } finally {
+                loadingIndicator.style.display = 'none';
+            }
+        }
+        
+        // Load model when page loads
+        document.addEventListener('DOMContentLoaded', loadModel);
+        
+        // Handle click on upload area
+        dropArea.addEventListener('click', () => imageUpload.click());
+        
+        // Handle image upload
+        imageUpload.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file && file.type.match('image.*')) {
+                handleImageFile(file);
+            }
+        });
+        
+        // Handle drag and drop
+        dropArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropArea.style.borderColor = 'var(--primary)';
+            dropArea.style.backgroundColor = 'rgba(46, 125, 50, 0.05)';
+        });
+        
+        dropArea.addEventListener('dragleave', () => {
+            dropArea.style.borderColor = '#ddd';
+            dropArea.style.backgroundColor = 'transparent';
+        });
+        
+        dropArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropArea.style.borderColor = '#ddd';
+            dropArea.style.backgroundColor = 'transparent';
+            
+            const file = e.dataTransfer.files[0];
+            if (file && file.type.match('image.*')) {
+                handleImageFile(file);
+            }
+        });
+        
+        // Process image file
+        function handleImageFile(file) {
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                imagePreview.src = event.target.result;
+                imagePreview.style.display = 'block';
+                uploadedImage = imagePreview;
+                detectBtn.disabled = false;
+                resultsDiv.style.display = 'none';
+            };
+            reader.readAsDataURL(file);
+        }
+        
+        // Detect objects
+        detectBtn.addEventListener('click', async function() {
+            if (!uploadedImage || !model) return;
+            
+            loadingIndicator.style.display = 'block';
+            detectBtn.disabled = true;
+            resultsDiv.style.display = 'none';
+            
+            try {
+                // Perform detection
+                const predictions = await model.detect(uploadedImage);
+                
+                // Filter food-related items
+                const foodItems = predictions.filter(item => 
+                    FRUIT_CLASSES.concat(['sandwich', 'carrot', 'broccoli', 
+                     'hot dog', 'pizza', 'donut', 'cake', 'bowl']).includes(item.class)
+                );
+                
+                displayResults(foodItems);
+            } catch (error) {
+                console.error('Detection error:', error);
+                resultsList.innerHTML = '<div class="result-item">Error analyzing image. Please try again.</div>';
+                resultsDiv.style.display = 'block';
+            } finally {
+                loadingIndicator.style.display = 'none';
+                detectBtn.disabled = false;
+            }
+        });
+        
+        // Display results with fruit count
+        function displayResults(predictions) {
+            if (!predictions || predictions.length === 0) {
+                resultsList.innerHTML = '<div class="result-item">No identifiable food items detected</div>';
+                resultsDiv.style.display = 'block';
+                return;
+            }
+            
+            // Count fruits
+            const fruitItems = predictions.filter(item => FRUIT_CLASSES.includes(item.class));
+            const fruitCount = fruitItems.length;
+            
+            // Create summary card
+            summaryContainer.innerHTML = `
+                <div class="summary-card">
+                    <div>
+                        <i class="fas fa-apple-alt"></i>
+                        <h4>Fruits Detected: ${fruitCount}</h4>
+                    </div>
+                    <div class="summary-count">${fruitCount}</div>
+                </div>
+            `;
+            
+            // Create detailed list
+            let resultsHtml = '<h4>Detailed Analysis</h4>';
+            predictions.forEach(item => {
+                const isFruit = FRUIT_CLASSES.includes(item.class);
+                resultsHtml += `
+                    <div class="result-item ${isFruit ? 'fruit-item' : ''}">
+                        <span>${capitalize(item.class)} ${isFruit ? '<i class="fas fa-apple-alt"></i>' : ''}</span>
+                        <span class="result-confidence">${Math.round(item.score * 100)}%</span>
+                    </div>
+                `;
+            });
+            
+            // Add waste reduction tip
+            resultsHtml += `
+                <div class="result-item" style="margin-top:20px;background:#fff8e1;">
+                    <span><strong>Waste Reduction Tip:</strong> ${getWasteTip(predictions)}</span>
+                </div>
+            `;
+            
+            resultsList.innerHTML = resultsHtml;
+            resultsDiv.style.display = 'block';
+        }
+        
+        // Helper function to capitalize first letter
+        function capitalize(str) {
+            return str.charAt(0).toUpperCase() + str.slice(1);
+        }
+        
+        // Generate waste reduction tip based on detected items
+        function getWasteTip(items) {
+            const classes = items.map(item => item.class);
+            
+            if (classes.some(c => ['apple', 'banana', 'orange'].includes(c))) {
+                return "Use overripe fruits in smoothies or desserts";
+            } else if (classes.some(c => ['bread', 'sandwich'].includes(c))) {
+                return "Make bread pudding or croutons from stale bread";
+            } else if (classes.some(c => ['vegetable', 'carrot', 'broccoli'].includes(c))) {
+                return "Use vegetable scraps for stocks or soups";
+            } else {
+                return "Review portion sizes and prep quantities";
+            }
+        }
+    </script>
+</body>
+</html>
